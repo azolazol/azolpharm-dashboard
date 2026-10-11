@@ -1,0 +1,17 @@
+const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict'),test=require('node:test');
+const source=fs.readFileSync(__dirname+'/../apps-script/Code.gs','utf8');
+function context(extra={}){const c=vm.createContext({console,...extra});vm.runInContext(source,c);return c;}
+test('recent 7 days and previous 7 days align and missing days become zero',()=>{const c=context();const r=c.summarize_([{period:'2026-10-10',ratio:30},{period:'2026-10-03',ratio:10}],'2026-10-10');assert.equal(r.points.length,28);assert.equal(r.score,30);assert.equal(r.change,200);assert.equal(c.summarize_([],'2026-10-10').change,null);});
+test('Naver checkpoint remains saved when YouTube fails; lock released',()=>{const writes={},meta={},logs=[];let released=false;
+ const c=context({LockService:{getScriptLock:()=>({tryLock:()=>true,releaseLock:()=>{released=true;}})}});
+ c.keywords_=()=>[{name:'당뇨',kind:'질환·증상',category:'혈당',en:'diabetes'}];c.meta_=()=>meta;c.setMeta_=v=>Object.assign(meta,v);
+ c.rows_=name=>writes[name]||[];c.put_=(name,rows)=>{writes[name]=rows;};c.log_=(...args)=>logs.push(args);
+ c.naver_=()=>({through:'2026-10-10',trends:[{name:'당뇨',kind:'질환·증상',category:'혈당',score:100,change:null,points:[]}]});c.youtube_=()=>{throw new Error('YOUTUBE_HTTP_403');};
+ const result=c.collect_('2026-10-11T20:00',false);assert.equal(result.ok,false);assert.equal(result.naver,'ok');assert.equal(writes.NAVER_CURRENT[0][3],'당뇨');assert.equal(writes.NAVER_HISTORY.length,1);assert.equal(meta.naverSlot,'2026-10-11T20:00');assert(released);assert.equal(logs[0][3],'YOUTUBE_HTTP_403');
+ c.collect_('2026-10-11T20:00',false);assert.equal(writes.NAVER_HISTORY.length,1);
+});
+test('duplicate history slot replaces rather than appends',()=>{const c=context(),store={};c.rows_=n=>store[n]||[];c.put_=(n,r)=>store[n]=r;c.setMeta_=()=>{};const d={through:'2026-10-10',trends:[{name:'당뇨',score:100,points:[]}]};c.saveNaver_(d,'now','slot');c.saveNaver_(d,'later','slot');assert.equal(store.NAVER_HISTORY.length,1);assert.equal(store.NAVER_HISTORY[0][1],'later');});
+test('no duplicate collection while another execution owns lock',()=>{const c=context({LockService:{getScriptLock:()=>({tryLock:()=>false})}});assert.equal(c.collect_('slot',false).error,'BUSY');});
+test('keys and raw provider errors never enter logs',()=>{const c=context();assert.equal(c.errorCode_(new Error('https://api.example/?key=SECRET')),'REQUEST_FAILED');assert.equal(c.errorCode_(new Error('YOUTUBE_HTTP_429')),'YOUTUBE_HTTP_429');assert.equal(c.safeCell_('=IMPORTXML("url")').charAt(0),"'");assert.equal(c.safeCell_(-12),-12);});
+test('public reader uses only fixed callback and escapes script tag',()=>{const c=context({ContentService:{MimeType:{JSON:'json',JAVASCRIPT:'js'},createTextOutput:t=>({text:t,setMimeType(){return this;}})}});c.prop_=()=> 'true';c.snapshot_=()=>({title:'</script>'});const good=c.doGet({parameter:{callback:'azolpharmReceive'}}).text;assert(good.startsWith('azolpharmReceive('));assert(!good.includes('</script>'));const bad=c.doGet({parameter:{callback:'alert(1)//'}}).text;assert(bad.startsWith('{'));});
+test('visitor endpoint rejects admin actions and oversized input',()=>{const c=context({ContentService:{MimeType:{JSON:'json'},createTextOutput:t=>({text:t,setMimeType(){return this;}})}});c.prop_=()=> 'true';assert.equal(JSON.parse(c.doPost({postData:{contents:JSON.stringify({action:'refresh',visitor:'x'.repeat(30)})}}).text).ok,false);assert.equal(JSON.parse(c.doPost({postData:{contents:'x'.repeat(201)}}).text).ok,false);});
