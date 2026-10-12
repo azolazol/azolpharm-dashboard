@@ -3,10 +3,12 @@ const $=id=>document.getElementById(id);
 let data=null,origin='domestic',requestPending=false;
 const text=(tag,value,className)=>{const e=document.createElement(tag);e.textContent=value;if(className)e.className=className;return e;};
 const fmt=v=>Number(v).toLocaleString('ko-KR',{maximumFractionDigits:1});
+const calendarDate=v=>{if(!v)return '수집 대기';if(/^\d{4}-\d{2}-\d{2}$/.test(v))return v;const d=new Date(v);return Number.isNaN(d.getTime())?String(v):new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Seoul',year:'numeric',month:'2-digit',day:'2-digit'}).format(d);};
+const historySlot=v=>{if(!/Z$/.test(String(v)))return String(v).replace('T',' ');const d=new Date(v);return Number.isNaN(d.getTime())?String(v):calendarDate(v)+' '+new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Seoul',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).format(d);};
 const date=v=>v?new Date(v).toLocaleString('ko-KR',{timeZone:'Asia/Seoul'}):'수집 대기';
 function link(title,url){const a=text('a',title);a.href=url;a.target='_blank';a.rel='noopener noreferrer';return a;}
 function render(){
- const trends=[...(data.trends||[])].sort((a,b)=>b.score-a.score);$('keyword-count').textContent=trends.length;$('top-keyword').textContent=trends[0]?.name||'수집 대기';$('through').textContent=data.through||'수집 대기';
+ const trends=[...(data.trends||[])].sort((a,b)=>b.score-a.score);$('keyword-count').textContent=trends.length;$('top-keyword').textContent=trends[0]?.name||'수집 대기';$('through').textContent=calendarDate(data.through);
  $('status').textContent='네이버 수집 '+date(data.naverAt)+' · 영상 수집 '+date(data.youtubeAt);
  const errors=[...(data.errors||[])];if(data.naverAt&&Date.now()-Date.parse(data.naverAt)>36*3600000)errors.push('네이버 갱신이 지연되고 있습니다.');$('error').hidden=!errors.length;$('error').textContent=errors.join(' · ');
  const previous=$('video-keyword').value;$('video-keyword').replaceChildren(new Option('상위 10개 모두',''));trends.slice(0,10).forEach((t,i)=>$('video-keyword').add(new Option((i+1)+'위 · '+t.name,t.name)));$('video-keyword').value=trends.slice(0,10).some(t=>t.name===previous)?previous:'';
@@ -21,7 +23,7 @@ function renderVideos(){if(!data)return;const container=$('videos');container.re
  videos.forEach(v=>{const a=link('', 'https://www.youtube.com/watch?v='+encodeURIComponent(v.id));a.className='video';a.append(text('strong',v.title),text('small',v.channel+' · '+String(v.publishedAt).slice(0,10)),text('span','조회 '+fmt(v.views)+'회'));group.append(a);});group.append(link(t.name+' 유튜브 직접 검색 ↗','https://www.youtube.com/results?search_query='+encodeURIComponent(t.name)));container.append(group);});
  if(!top.length)container.append(text('p','네이버 순위를 먼저 수집해 주세요.','hint'));
 }
-function renderHistory(){const groups=new Map();(data.history||[]).filter(r=>r.rank<=10).forEach(r=>{if(!groups.has(r.slot))groups.set(r.slot,[]);groups.get(r.slot).push(r);});const box=$('history');box.replaceChildren();[...groups.entries()].sort((a,b)=>b[0].localeCompare(a[0])).forEach(([slot,rows])=>{const col=text('article','','history-day');col.append(text('h3',slot.replace('T',' ')));rows.sort((a,b)=>a.rank-b.rank).forEach(r=>col.append(text('p',r.rank+'. '+r.name)));box.append(col);});if(!box.children.length)box.append(text('p','첫 수집 후 날짜별 기록이 표시됩니다.','hint'));}
+function renderHistory(){const groups=new Map();(data.history||[]).filter(r=>r.rank<=10).forEach(r=>{if(!groups.has(r.slot))groups.set(r.slot,[]);groups.get(r.slot).push(r);});const box=$('history');box.replaceChildren();[...groups.entries()].sort((a,b)=>b[0].localeCompare(a[0])).forEach(([slot,rows])=>{const col=text('article','','history-day');col.append(text('h3',historySlot(slot)));rows.sort((a,b)=>a.rank-b.rank).forEach(r=>col.append(text('p',r.rank+'. '+r.name)));box.append(col);});if(!box.children.length)box.append(text('p','첫 수집 후 날짜별 기록이 표시됩니다.','hint'));}
 async function load(){if(requestPending)return;const base=window.AZOLPHARM_CONFIG?.apiUrl||'';if(!/^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/.test(base)){$('status').textContent='설치 대기: config.js에 Apps Script 웹 앱 주소를 입력해 주세요.';return;}
  requestPending=true;$('reload').disabled=true;$('status').textContent='데이터를 불러오는 중입니다…';
  try{let visitor=localStorage.getItem('azolpharm-visitor');if(!visitor){visitor=crypto.randomUUID();localStorage.setItem('azolpharm-visitor',visitor);}await fetch(base,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},body:JSON.stringify({action:'visit',visitor}),signal:AbortSignal.timeout(10000)});}catch(e){/* Blocked storage/visit must not prevent reading trends. */}
