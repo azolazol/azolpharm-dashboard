@@ -6,8 +6,8 @@
 <section class="panel"><h2>날짜별 상위 10</h2><p class="hint">가로로 넘겨 확인하세요. 최근 30일 표시. ‘이전 일별’은 하루 기준, 새 오전·오후 기록은 최근 7일 기준입니다.</p><div id="history" class="history"></div></section>
 <div class="layout"><section class="panel"><h2>건강 키워드 관심도</h2><div class="filters"><input id="query" aria-label="키워드 검색" placeholder="키워드 찾기"><select id="kind" aria-label="분류"><option>전체</option><option>질환·증상</option><option>성분</option><option>상품</option></select></div><div class="table-scroll"><table><thead><tr><th>순위</th><th>키워드</th><th>관심지수</th><th>7일 변화</th></tr></thead><tbody id="rankings"></tbody></table></div><p class="hint">추적 키워드 내 상대적 관심도입니다. 네이버 전체 검색어 순위나 판매량이 아닙니다.</p></section>
 <section class="panel"><p class="eyebrow">NAVER TOP 10 × YOUTUBE</p><h2>검색 상위 10 · 추천 영상</h2><div class="filters"><button id="domestic" aria-pressed="true">국내 영상</button><button id="overseas" aria-pressed="false">해외 영상</button><select id="video-keyword" aria-label="추천 영상 키워드"><option value="">상위 10개 모두</option></select></div><p class="hint">최근 30일 게시 영상 · 키워드별 조회수순 최대 3개 · 언어·검색 지역에 따른 분류</p><div id="videos"></div><p class="hint">조회수는 의학적 정확성이나 제품 효능을 뜻하지 않습니다.</p></section></div>
-<section class="panel feedback-panel" aria-labelledby="feedback-heading">
-<h2 id="feedback-heading">문의·개선 제안</h2><p>불편한 점이나 더 보고 싶은 정보를 알려주세요.</p>
+<details class="panel feedback-panel">
+<summary id="feedback-heading">문의·개선 제안 <span class="feedback-toggle-hint">눌러서 열기</span></summary><p>불편한 점이나 더 보고 싶은 정보를 알려주세요.</p>
 <p id="feedback-availability" class="hint">문의 접수를 준비 중입니다.</p>
 <form id="feedback-form"><fieldset id="feedback-fields" disabled>
 <label for="feedback-kind">문의 유형</label><select id="feedback-kind"><option>개선 제안</option><option>오류 신고</option><option>기타 문의</option></select>
@@ -17,5 +17,5 @@
 <label class="feedback-consent"><input id="feedback-consent" type="checkbox" required>문의 내용과 입력한 이메일을 문의 처리 목적으로 관리자에게 전달·보관하는 데 동의합니다.</label>
 <p class="hint">문의는 공개되지 않습니다. 첨부파일은 받지 않으며, 답변 이메일을 생략해도 제안을 보낼 수 있습니다.</p>
 <button id="feedback-send" type="submit">의견 보내기</button></fieldset></form>
-<p id="feedback-result" role="status" aria-live="polite"></p></section>
+<p id="feedback-result" role="status" aria-live="polite"></p></details>
 <footer><p>azolpharm · 네이버 관심도와 YouTube 공개 데이터</p><p id="visitors">오늘 방문자 —명 · 총 방문자 —명</p><small>한국시간 기준 · 동일 브라우저 중복 제외 · 새 시스템 집계 시작일부터 누적</small></footer></main></body></html>
