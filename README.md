@@ -49,7 +49,7 @@ GitHub 저장소: https://github.com/azolazol/azolpharm-dashboard
 ## 공개·비공개 범위
 
 시트와 스크립트 편집 권한은 소유자만 유지합니다. 누구나 볼 수 있는 웹 앱에는 순위·영상·집계만 노출합니다.
-공개 HTTP 쓰기는 익명 방문 집계만 허용하며, 수집 실행·키 변경·시트 임의 수정 기능은 공개하지 않습니다.
+공개 HTTP 쓰기는 익명 방문 집계와 검증된 문의 접수를 허용하며, 수집 실행·키 변경·시트 임의 수정 기능은 공개하지 않습니다.
 Script Properties는 편집자로부터 비밀을 숨기는 금고가 아닙니다. 스크립트 편집자를 추가하지 마세요.
 Apps Script URL은 비밀키가 아니며 `config.js`에 넣어도 됩니다. API 키는 절대 넣지 마세요.
 
@@ -72,3 +72,7 @@ Apps Script URL은 비밀키가 아니며 `config.js`에 넣어도 됩니다. AP
 - https://developers.google.com/apps-script/guides/content
 - https://developers.google.com/apps-script/guides/services/quotas
 - https://docs.github.com/en/pages/getting-started-with-github-pages/what-is-github-pages
+
+## 문의·개선 제안
+
+하단 문의 폼과 비공개 Sheets 저장, 소유자 이메일 알림 코드가 포함되어 있습니다. Apps Script 권한 승인과 배포 갱신이 필요합니다. [문의 설정 안내](docs/FEEDBACK_SETUP.md)를 따르세요. 알림 수신 주소는 `FEEDBACK_TO` 스크립트 속성에만 저장합니다.

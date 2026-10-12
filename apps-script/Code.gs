@@ -6,6 +6,7 @@ const HEADERS={
  NAVER_HISTORY:['slot','collected_at','through','rank','keyword','kind','category','score','change_pct'],
  YOUTUBE_CURRENT:['collected_at','id','keyword','keywords_json','origin','title','channel','published_at','views'],
  RUN_LOG:['at','slot','naver','youtube','message'],META:['key','value'],
+ FEEDBACK:['id','created_at','kind','message','reply_email','visitor_hash','mail_status'],
  VISITORS:['hash','first_seen'],VISITOR_DAYS:['day','hash']
 };
 function prop_(key,required){const value=PropertiesService.getScriptProperties().getProperty(key);if(required&&!value)throw new Error('MISSING_'+key);return value;}
@@ -106,24 +107,84 @@ function collect_(slot,force){
 function snapshot_(){const m=meta_();const trends=rows_('NAVER_CURRENT').filter(r=>r[3]).map(r=>({name:r[3],kind:r[4],category:r[5],score:Number(r[6]),change:r[7]===''?null:Number(r[7]),points:JSON.parse(r[8]||'[]')}));
  const cutoff=Date.now()-29*86400000;const videos=rows_('YOUTUBE_CURRENT').filter(r=>r[1]&&Date.parse(r[0])>=cutoff).map(r=>({id:r[1],keyword:r[2],keywords:JSON.parse(r[3]||'[]'),origin:r[4],title:r[5],channel:r[6],publishedAt:r[7],views:Number(r[8])}));
  const today=day_();const history=rows_('NAVER_HISTORY').filter(r=>r[0]&&String(r[0]).slice(0,10)>=offset_(today,-30)).map(r=>({slot:r[0],through:r[2],rank:Number(r[3]),name:r[4],score:Number(r[7])}));
- return {updatedAt:m.lastAttempt||null,through:m.through||null,naverAt:m.naverAt||null,youtubeAt:m.youtubeAt||null,trends,videos,history,errors:JSON.parse(m.errors||'[]'),visitors:{today:rows_('VISITOR_DAYS').filter(r=>r[0]===today).length,total:rows_('VISITORS').filter(r=>r[0]).length}};
+ return {updatedAt:m.lastAttempt||null,through:m.through||null,naverAt:m.naverAt||null,youtubeAt:m.youtubeAt||null,trends,videos,history,errors:JSON.parse(m.errors||'[]'),feedbackEnabled:prop_('FEEDBACK_ENABLED')==='true',visitors:{today:rows_('VISITOR_DAYS').filter(r=>r[0]===today).length,total:rows_('VISITORS').filter(r=>r[0]).length}};
 }
 function doGet(e){
  if(prop_('PUBLIC_READ_ENABLED')!=='true')return ContentService.createTextOutput('{"error":"NOT_PUBLISHED"}').setMimeType(ContentService.MimeType.JSON);
- let data;try{data=snapshot_();}catch(err){data={error:'DATA_UNAVAILABLE'};}
+ let data;try{data=e?.parameter?.action==='feedbackStatus'?feedbackStatus_(e.parameter.id):snapshot_();}catch(err){data={error:'DATA_UNAVAILABLE'};}
  // Fixed callback, no user-provided JavaScript; public, read-only output only.
  const json=JSON.stringify(data).replace(/</g,'\\u003c').replace(/\u2028/g,'\\u2028').replace(/\u2029/g,'\\u2029');
+ if(e?.parameter?.action==='feedbackStatus'&&e?.parameter?.callback==='azolpharmFeedbackReceive')return ContentService.createTextOutput('azolpharmFeedbackReceive('+json+');').setMimeType(ContentService.MimeType.JAVASCRIPT);
  if(e?.parameter?.callback==='azolpharmReceive')return ContentService.createTextOutput('azolpharmReceive('+json+');').setMimeType(ContentService.MimeType.JAVASCRIPT);
  return ContentService.createTextOutput(json).setMimeType(ContentService.MimeType.JSON);
 }
 function doPost(e){
  const respond=v=>ContentService.createTextOutput(JSON.stringify(v)).setMimeType(ContentService.MimeType.JSON);
  if(prop_('PUBLIC_READ_ENABLED')!=='true')return respond({ok:false});
- const body=e?.postData?.contents||'';if(body.length>200)return respond({ok:false});let input;try{input=JSON.parse(body);}catch(err){return respond({ok:false});}
+ const body=e?.postData?.contents||'';if(body.length>6000)return respond({ok:false});let input;try{input=JSON.parse(body);}catch(err){return respond({ok:false});}
+ if(input.action==='feedback')return respond(submitFeedback_(input));
+ if(body.length>200)return respond({ok:false});
  if(input.action!=='visit'||typeof input.visitor!=='string'||!/^[-a-zA-Z0-9]{20,80}$/.test(input.visitor))return respond({ok:false});
  const lock=LockService.getScriptLock();if(!lock.tryLock(1000))return respond({ok:false,error:'BUSY'});
  try{const hash=Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256,input.visitor).map(b=>(b&255).toString(16).padStart(2,'0')).join(''),day=day_();
  const people=rows_('VISITORS'),days=rows_('VISITOR_DAYS');if(!people.some(r=>r[0]===hash))db_().getSheetByName('VISITORS').appendRow([hash,day]);
  if(!days.some(r=>r[0]===day&&r[1]===hash))db_().getSheetByName('VISITOR_DAYS').appendRow([day,hash]);
  return respond({ok:true});}finally{lock.releaseLock();}
+}
+
+// The recipient is private configuration, never returned to the browser.
+function setupFeedback(){
+ const recipient=prop_('FEEDBACK_TO',true);
+ if(!/^[^\s@,;<>]+@[^\s@,;<>]+\.[^\s@,;<>]+$/.test(recipient))throw new Error('INVALID_FEEDBACK_TO');
+ const book=db_();let sheet=book.getSheetByName('FEEDBACK');
+ if(!sheet)sheet=book.insertSheet('FEEDBACK');
+ if(sheet.getLastRow()&&sheet.getRange(1,1,1,7).getValues()[0].join('|')!==HEADERS.FEEDBACK.join('|'))throw new Error('HEADER_MISMATCH_FEEDBACK');
+ sheet.getRange(1,1,1,7).setValues([HEADERS.FEEDBACK]).setBackground('#eeeeee').setFontWeight('bold');sheet.setFrozenRows(1);
+ MailApp.sendEmail({to:recipient,subject:'[azolpharm] 문의 알림 설정 확인',body:'문의 알림 발송 권한이 확인되었습니다. 웹 앱을 새 버전으로 배포하면 문의 접수를 사용할 수 있습니다.',name:'azolpharm'});
+ PropertiesService.getScriptProperties().setProperty('FEEDBACK_ENABLED','true');
+ console.log('FEEDBACK_READY');
+}
+function feedbackHash_(value){return Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256,value).map(b=>(b&255).toString(16).padStart(2,'0')).join('');}
+function validFeedbackId_(v){return typeof v==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v);}
+function feedbackStatus_(id){
+ if(!validFeedbackId_(id)||prop_('FEEDBACK_ENABLED')!=='true')return {feedback:{state:'unavailable'}};
+ const row=rows_('FEEDBACK').find(r=>r[0]===id);
+ if(row)return {feedback:{state:'received'}};
+ const reason=CacheService.getScriptCache().get('feedback:'+id);
+ return {feedback:{state:reason||'pending'}};
+}
+function submitFeedback_(input){
+ if(prop_('FEEDBACK_ENABLED')!=='true'||!validFeedbackId_(input.id))return {ok:false};
+ const reject=state=>{CacheService.getScriptCache().put('feedback:'+input.id,state,600);return {ok:false};};
+ if(!validFeedbackId_(input.visitor)||input.website||input.consent!==true||!['개선 제안','오류 신고','기타 문의'].includes(input.kind))return reject('invalid');
+ if(typeof input.message!=='string'||input.message.trim().length<10||input.message.length>2000||typeof input.email!=='string'||input.email.length>254)return reject('invalid');
+ const email=input.email.trim();if(email&&!/^[^\s@,;<>]+@[^\s@,;<>]+\.[^\s@,;<>]+$/.test(email))return reject('invalid');
+ const lock=LockService.getScriptLock();if(!lock.tryLock(1000))return reject('busy');
+ try{
+ const rows=rows_('FEEDBACK');if(rows.some(r=>r[0]===input.id))return {ok:true};
+ const now=new Date(),hash=feedbackHash_(input.visitor),today=day_(now);
+ const daily=rows.filter(r=>day_(new Date(r[1]))===today),own=daily.filter(r=>r[5]===hash);
+ if(daily.length>=30||own.length>=3||own.some(r=>now-new Date(r[1])<60000))return reject('limited');
+ const row=[input.id,now.toISOString(),input.kind,input.message.trim(),email,hash,'PENDING'];
+ const sheet=db_().getSheetByName('FEEDBACK');sheet.appendRow(row.map(safeCell_));const n=sheet.getLastRow();
+ // Persist first; a failed notification never loses the inquiry.
+ sendFeedbackMail_(sheet,n,row);
+ return {ok:true};
+ }catch(e){return reject('failed');}finally{lock.releaseLock();}
+}
+function sendFeedbackMail_(sheet,index,row){
+ let delivered=false;
+ try{
+ const recipient=prop_('FEEDBACK_TO',true);if(!/^[^\s@,;<>]+@[^\s@,;<>]+\.[^\s@,;<>]+$/.test(recipient))throw new Error('INVALID_RECIPIENT');
+ if(MailApp.getRemainingDailyQuota()<1)throw new Error('MAIL_QUOTA');
+ sheet.getRange(index,7).setValue('SENDING');
+ const message={to:recipient,subject:'[azolpharm] '+row[2]+' 접수',name:'azolpharm',body:'접수번호: '+row[0]+'\n접수시각: '+row[1]+'\n유형: '+row[2]+'\n답변 이메일(작성자 입력, 미인증): '+(row[4]||'없음')+'\n\n'+row[3]+'\n\n문의 내용에 포함된 링크는 확인 후 열어 주세요.'};
+ if(row[4])message.replyTo=row[4];
+ MailApp.sendEmail(message);delivered=true;sheet.getRange(index,7).setValue('SENT');
+ }catch(e){sheet.getRange(index,7).setValue(delivered?'UNKNOWN':'FAILED');}
+}
+// Owner runs manually only if FEEDBACK contains FAILED / PENDING messages.
+function retryFeedbackEmails(){
+ const lock=LockService.getScriptLock();if(!lock.tryLock(1000))throw new Error('BUSY');
+ try{const sheet=db_().getSheetByName('FEEDBACK');let sent=0;rows_('FEEDBACK').forEach((row,i)=>{if(sent<10&&['PENDING','FAILED'].includes(row[6])){sendFeedbackMail_(sheet,i+2,row);sent++;}});}finally{lock.releaseLock();}
 }

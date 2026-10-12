@@ -1,5 +1,6 @@
 'use strict';
 const $=id=>document.getElementById(id);
+let feedbackBusy=false;
 let data=null,origin='domestic',requestPending=false;
 const text=(tag,value,className)=>{const e=document.createElement(tag);e.textContent=value;if(className)e.className=className;return e;};
 const fmt=v=>Number(v).toLocaleString('ko-KR',{maximumFractionDigits:1});
@@ -8,6 +9,7 @@ const historySlot=v=>{if(!/Z$/.test(String(v)))return String(v).replace('T',' ')
 const date=v=>v?new Date(v).toLocaleString('ko-KR',{timeZone:'Asia/Seoul'}):'수집 대기';
 function link(title,url){const a=text('a',title);a.href=url;a.target='_blank';a.rel='noopener noreferrer';return a;}
 function render(){
+ $('feedback-fields').disabled=!data.feedbackEnabled||feedbackBusy;$('feedback-availability').textContent=data.feedbackEnabled?'관리자에게 비공개로 전달됩니다.':'문의 접수를 준비 중입니다.';
  const trends=[...(data.trends||[])].sort((a,b)=>b.score-a.score);$('keyword-count').textContent=trends.length;$('top-keyword').textContent=trends[0]?.name||'수집 대기';$('through').textContent=calendarDate(data.through);
  $('status').textContent='네이버 수집 '+date(data.naverAt)+' · 영상 수집 '+date(data.youtubeAt);
  const errors=[...(data.errors||[])];if(data.naverAt&&Date.now()-Date.parse(data.naverAt)>36*3600000)errors.push('네이버 갱신이 지연되고 있습니다.');$('error').hidden=!errors.length;$('error').textContent=errors.join(' · ');
@@ -36,3 +38,29 @@ async function load(){if(requestPending)return;const base=window.AZOLPHARM_CONFI
 $('reload').onclick=load;$('query').oninput=renderRanks;$('kind').onchange=renderRanks;$('video-keyword').onchange=renderVideos;
 for(const id of ['domestic','overseas'])$(id).onclick=()=>{origin=id;for(const name of ['domestic','overseas'])$(name).setAttribute('aria-pressed',String(name===id));renderVideos();};
 load();setInterval(()=>{if(document.visibilityState==='visible')load();},300000);
+
+let feedbackRequest=null;
+function checkFeedback(id){return new Promise((resolve,reject)=>{
+ const script=document.createElement('script');let timer;
+ const finish=()=>{clearTimeout(timer);script.remove();};
+ window.azolpharmFeedbackReceive=payload=>{finish();resolve(payload.feedback?.state||'unavailable');};
+ script.onerror=()=>{finish();reject(new Error('network'));};timer=setTimeout(()=>{finish();reject(new Error('timeout'));},15000);
+ script.src=window.AZOLPHARM_CONFIG.apiUrl+'?action=feedbackStatus&id='+encodeURIComponent(id)+'&callback=azolpharmFeedbackReceive&t='+Date.now();document.head.append(script);
+});}
+$('feedback-form').onsubmit=async event=>{
+ event.preventDefault();if(feedbackBusy||!data?.feedbackEnabled)return;
+ const fields={kind:$('feedback-kind').value,message:$('feedback-message').value.trim(),email:$('feedback-email').value.trim(),website:$('feedback-website').value,consent:$('feedback-consent').checked};
+ const fingerprint=JSON.stringify(fields);
+ if(!feedbackRequest||feedbackRequest.fingerprint!==fingerprint){let visitor;try{visitor=localStorage.getItem('azolpharm-feedback-visitor');if(!visitor){visitor=crypto.randomUUID();localStorage.setItem('azolpharm-feedback-visitor',visitor);}}catch(e){visitor=crypto.randomUUID();}feedbackRequest={fingerprint,input:{...fields,action:'feedback',id:crypto.randomUUID(),visitor}};}
+ feedbackBusy=true;$('feedback-fields').disabled=true;$('feedback-result').textContent='접수 여부를 확인하고 있습니다…';
+ try{
+ try{await fetch(window.AZOLPHARM_CONFIG.apiUrl,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},body:JSON.stringify(feedbackRequest.input),signal:AbortSignal.timeout(15000)});}catch(e){/* A timeout may follow successful saving: confirm by receipt. */}
+ let state='pending';for(let i=0;i<6;i++){state=await checkFeedback(feedbackRequest.input.id);if(state!=='pending')break;await new Promise(r=>setTimeout(r,2000));}
+ if(state==='received'){$('feedback-result').textContent='접수되었습니다. 의견을 보내주셔서 감사합니다.';$('feedback-form').reset();feedbackRequest=null;}
+ else if(state==='limited'){$('feedback-result').textContent='접수가 많습니다. 잠시 후 또는 내일 다시 보내 주세요.';feedbackRequest=null;}
+ else if(state==='invalid'){$('feedback-result').textContent='내용은 10~2,000자, 이메일 형식과 동의 여부를 확인해 주세요.';feedbackRequest=null;}
+ else if(state==='busy'){$('feedback-result').textContent='다른 작업을 처리 중입니다. 잠시 후 다시 눌러 주세요.';}
+ else {$('feedback-result').textContent='접수 여부를 확인하지 못했습니다. 내용을 유지한 채 의견 보내기를 다시 눌러 확인해 주세요.';}
+ }catch(e){$('feedback-result').textContent='연결이 지연됩니다. 내용을 유지한 채 다시 보내면 중복 접수를 확인합니다.';}
+ finally{feedbackBusy=false;$('feedback-fields').disabled=!data?.feedbackEnabled;}
+};
