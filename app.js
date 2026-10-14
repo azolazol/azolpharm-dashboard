@@ -1,4 +1,5 @@
 'use strict';
+function trackEvent(name,params={}){try{if(typeof window.gtag==='function')window.gtag('event',name,{send_to:'G-J1G3EYP9WK',...params});}catch(e){/* Analytics must never block site actions. */}}
 const $=id=>document.getElementById(id);
 let feedbackBusy=false;
 let data=null,origin='domestic',requestPending=false;
@@ -22,7 +23,7 @@ function renderRanks(){if(!data)return;const rows=$('rankings');rows.replaceChil
 function renderVideos(){if(!data)return;const container=$('videos');container.replaceChildren();const top=[...(data.trends||[])].sort((a,b)=>b.score-a.score).slice(0,10),selected=$('video-keyword').value;
  top.forEach((t,i)=>{if(selected&&selected!==t.name)return;const group=text('section','','video-group');group.append(text('h3',(i+1)+'위 · '+t.name));const videos=(data.videos||[]).filter(v=>(v.keywords||[v.keyword]).includes(t.name)&&(v.origin===origin||v.origin==='both')&&Date.parse(v.publishedAt)>=Date.now()-30*86400000).sort((a,b)=>b.views-a.views).slice(0,selected?10:3);
  if(!videos.length)group.append(text('p','현재 수집된 최근 30일 영상이 없습니다.','hint'));
- videos.forEach(v=>{const a=link('', 'https://www.youtube.com/watch?v='+encodeURIComponent(v.id));a.className='video';a.append(text('strong',v.title),text('small',v.channel+' · '+String(v.publishedAt).slice(0,10)),text('span','조회 '+fmt(v.views)+'회'));group.append(a);});group.append(link(t.name+' 유튜브 직접 검색 ↗','https://www.youtube.com/results?search_query='+encodeURIComponent(t.name)));container.append(group);});
+ videos.forEach(v=>{const a=link('', 'https://www.youtube.com/watch?v='+encodeURIComponent(v.id));a.className='video';a.addEventListener('click',()=>trackEvent('youtube_video_click',{video_id:v.id,video_region:origin,keyword_rank:i+1}));a.append(text('strong',v.title),text('small',v.channel+' · '+String(v.publishedAt).slice(0,10)),text('span','조회 '+fmt(v.views)+'회'));group.append(a);});group.append(link(t.name+' 유튜브 직접 검색 ↗','https://www.youtube.com/results?search_query='+encodeURIComponent(t.name)));container.append(group);});
  if(!top.length)container.append(text('p','네이버 순위를 먼저 수집해 주세요.','hint'));
 }
 function renderHistory(){const groups=new Map();(data.history||[]).filter(r=>r.rank<=10).forEach(r=>{if(!groups.has(r.slot))groups.set(r.slot,[]);groups.get(r.slot).push(r);});const box=$('history');box.replaceChildren();[...groups.entries()].sort((a,b)=>b[0].localeCompare(a[0])).forEach(([slot,rows])=>{const col=text('article','','history-day');col.append(text('h3',historySlot(slot)));rows.sort((a,b)=>a.rank-b.rank).forEach(r=>col.append(text('p',r.rank+'. '+r.name)));box.append(col);});if(!box.children.length)box.append(text('p','첫 수집 후 날짜별 기록이 표시됩니다.','hint'));}
@@ -36,7 +37,7 @@ async function load(){if(requestPending)return;const base=window.AZOLPHARM_CONFI
  script.src=base+'?callback=azolpharmReceive&t='+Date.now();document.head.append(script);
 }
 $('reload').onclick=load;$('query').oninput=renderRanks;$('kind').onchange=renderRanks;$('video-keyword').onchange=renderVideos;
-for(const id of ['domestic','overseas'])$(id).onclick=()=>{origin=id;for(const name of ['domestic','overseas'])$(name).setAttribute('aria-pressed',String(name===id));renderVideos();};
+for(const id of ['domestic','overseas'])$(id).onclick=()=>{if(origin!==id)trackEvent('video_region_select',{video_region:id});origin=id;for(const name of ['domestic','overseas'])$(name).setAttribute('aria-pressed',String(name===id));renderVideos();};
 load();setInterval(()=>{if(document.visibilityState==='visible')load();},300000);
 
 let feedbackRequest=null;
@@ -56,7 +57,7 @@ $('feedback-form').onsubmit=async event=>{
  try{
  try{await fetch(window.AZOLPHARM_CONFIG.apiUrl,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},body:JSON.stringify(feedbackRequest.input),signal:AbortSignal.timeout(15000)});}catch(e){/* A timeout may follow successful saving: confirm by receipt. */}
  let state='pending';for(let i=0;i<6;i++){state=await checkFeedback(feedbackRequest.input.id);if(state!=='pending')break;await new Promise(r=>setTimeout(r,2000));}
- if(state==='received'){$('feedback-result').textContent='접수되었습니다. 의견을 보내주셔서 감사합니다.';$('feedback-form').reset();feedbackRequest=null;}
+ if(state==='received'){trackEvent('feedback_received');$('feedback-result').textContent='접수되었습니다. 의견을 보내주셔서 감사합니다.';$('feedback-form').reset();feedbackRequest=null;}
  else if(state==='limited'){$('feedback-result').textContent='접수가 많습니다. 잠시 후 또는 내일 다시 보내 주세요.';feedbackRequest=null;}
  else if(state==='invalid'){$('feedback-result').textContent='내용은 10~2,000자, 이메일 형식과 동의 여부를 확인해 주세요.';feedbackRequest=null;}
  else if(state==='busy'){$('feedback-result').textContent='다른 작업을 처리 중입니다. 잠시 후 다시 눌러 주세요.';}

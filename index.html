@@ -1,4 +1,17 @@
-<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>azolpharm · 건강 관심도</title><link rel="stylesheet" href="style.css"><script src="config.js" defer></script><script src="app.js" defer></script></head><body>
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><!-- Google Analytics 4: public measurement ID; no form values are sent. -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-J1G3EYP9WK"></script>
+<script>
+window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'G-J1G3EYP9WK', {
+  page_location: location.origin + location.pathname,
+  page_referrer: document.referrer ? new URL(document.referrer).origin : '',
+  allow_google_signals: false,
+  allow_ad_personalization_signals: false
+});
+</script>
+<title>azolpharm · 건강 관심도</title><link rel="stylesheet" href="style.css"><script src="config.js" defer></script><script src="app.js" defer></script></head><body>
 <header><a href="./" class="brand">azolpharm <span>건강 관심도를 함께 보다</span></a></header>
 <main><div class="intro"><div><p class="eyebrow">PHARMACY TREND MONITOR</p><h1>오늘, 사람들이 궁금한 건강</h1><p>질환·증상부터 성분과 상품까지</p></div><button id="reload">화면 새로고침</button></div>
 <p id="status" role="status">데이터 연결을 확인하고 있습니다.</p><p id="error" role="alert" hidden></p>
